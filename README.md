@@ -101,7 +101,7 @@ something you should trust if the input had problems.
 | `validate.mjs` | Conformance layer. Owns the interop rules. |
 | `server.mjs` | HTTP API. `node:` builtins only. |
 | `test.mjs` | 21 tests against external ground truth. |
-| `demo.html` | Offline browser UI. |
+| `index.html` | Offline browser UI. |
 
 ## License
 
