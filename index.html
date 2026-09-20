@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EIP-681 Conformance Checker</title>
+<style>
+  :root{
+    --bg:#0b0d10;--panel:#141820;--panel2:#1b2130;--line:#28303f;
+    --tx:#e6ebf5;--dim:#8b98ad;--ok:#3ddc97;--warn:#ffc857;--err:#ff5c7a;--acc:#6aa6ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+       font:15px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .wrap{max-width:900px;margin:0 auto;padding:32px 20px 64px}
+  h1{font-size:20px;margin:0 0 4px;letter-spacing:-.2px}
+  h1 span{color:var(--acc)}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:24px}
+  label{display:block;font-size:12px;color:var(--dim);margin-bottom:6px;
+        text-transform:uppercase;letter-spacing:.8px}
+  textarea{width:100%;min-height:84px;background:var(--panel);color:var(--tx);
+           border:1px solid var(--line);border-radius:8px;padding:12px;
+           font:inherit;font-size:14px;resize:vertical;outline:none}
+  textarea:focus{border-color:var(--acc)}
+  .row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+  button{background:var(--acc);color:#06111f;border:0;border-radius:7px;
+         padding:9px 16px;font:inherit;font-weight:600;font-size:13px;cursor:pointer}
+  button:hover{filter:brightness(1.1)}
+  button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line)}
+  .verdict{margin-top:20px;padding:12px 14px;border-radius:8px;font-weight:600;
+           display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .verdict.pass{background:rgba(61,220,151,.12);color:var(--ok);border:1px solid rgba(61,220,151,.3)}
+  .verdict.fail{background:rgba(255,92,122,.12);color:var(--err);border:1px solid rgba(255,92,122,.3)}
+  .verdict .meta{font-weight:400;font-size:12px;opacity:.85}
+  .issue{background:var(--panel);border:1px solid var(--line);border-left-width:3px;
+         border-radius:8px;padding:11px 14px;margin-top:10px}
+  .issue.error{border-left-color:var(--err)}
+  .issue.warn{border-left-color:var(--warn)}
+  .issue .code{font-size:12px;font-weight:700;letter-spacing:.4px}
+  .issue.error .code{color:var(--err)}
+  .issue.warn .code{color:var(--warn)}
+  .issue .msg{margin-top:3px;font-size:14px}
+  .issue .hint{margin-top:6px;font-size:13px;color:var(--dim);line-height:1.55}
+  .parsed{margin-top:16px;background:var(--panel);border:1px solid var(--line);
+          border-radius:8px;padding:12px 14px;font-size:13px;overflow-x:auto;white-space:pre}
+  .parsed b{color:var(--dim);font-weight:400}
+  .canon{margin-top:14px;background:var(--panel2);border:1px solid rgba(106,166,255,.35);
+         border-radius:8px;padding:12px 14px;font-size:13px;word-break:break-all}
+  .canon .k{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:5px}
+  .examples{margin-top:22px;font-size:12px;color:var(--dim)}
+  .examples a{color:var(--acc);cursor:pointer;text-decoration:none;margin-right:14px;
+              display:inline-block;margin-bottom:6px}
+  .examples a:hover{text-decoration:underline}
+  footer{margin-top:36px;padding-top:16px;border-top:1px solid var(--line);
+         font-size:12px;color:var(--dim);line-height:1.7}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EIP-681 <span>Conformance Checker</span></h1>
+  <div class="sub">Tells you <em>why</em> a payment link will mispay. Runs entirely in your browser &mdash; the URI never leaves this page.</div>
+
+  <label for="uri">EIP-681 URI</label>
+  <textarea id="uri" spellcheck="false" placeholder="ethereum:0x…@8453?value=1000000"></textarea>
+  <div class="row">
+    <button id="check">Check</button>
+    <button id="clear" class="ghost">Clear</button>
+  </div>
+
+  <div class="examples">
+    Try:
+    <a data-u="ethereum:0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed@8453?value=1000000">clean native</a>
+    <a data-u="ethereum:0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed/transfer?address=0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359&uint256=1000">token, no chain</a>
+    <a data-u="ethereum:0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed@1?value=1e18">scientific</a>
+    <a data-u="ethereum:0x5aaeb6053F3E94C9b9A09f33669435E7Ef1BeAed@1">bad checksum</a>
+    <a data-u="ethereum:0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed@1?value=1&value=2">duplicate</a>
+  </div>
+
+  <div id="out"></div>
+
+  <footer>
+    <div><b>API:</b> <code>GET /v1/validate?uri=…</code> &middot; <code>POST /v1/validate {"uri":"…"}</code></div>
+    <div style="margin-top:8px">Zero dependencies. BigInt-exact amounts. 21 tests against external vectors (Keccak-256, all four EIP-55 canonical addresses, EIP-681 spec examples).</div>
+    <div style="margin-top:8px">Self-host: <code>node server.mjs</code> &mdash; deterministic, offline, no logging of submitted URIs.</div>
+  </footer>
+</div>
+
+<script type="module">
+import { validate } from './validate.mjs';
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function render(uri) {
+  const out = $('out');
+  if (!uri.trim()) { out.innerHTML = ''; return; }
+
+  const r = validate(uri);
+  const pass = r.ok && r.warnings === 0;
+  const cls = r.ok ? (r.warnings ? 'fail' : 'pass') : 'fail';
+
+  const headline = pass ? 'PASS — conforms to EIP-681'
+    : r.ok ? `PASS with ${r.warnings} warning${r.warnings > 1 ? 's' : ''}`
+    : `FAIL — ${r.errors} error${r.errors > 1 ? 's' : ''}`;
+
+  let html = `<div class="verdict ${r.ok && !r.warnings ? 'pass' : 'fail'}">
+      <span>${headline}</span>
+      <span class="meta">${r.errors} error(s) · ${r.warnings} warning(s)</span>
+    </div>`;
+
+  for (const i of r.issues) {
+    html += `<div class="issue ${i.severity === 'error' ? 'error' : 'warn'}">
+      <div class="code">${i.severity === 'error' ? '✕' : '!'} ${esc(i.code)}</div>
+      <div class="msg">${esc(i.message)}</div>
+      ${i.hint ? `<div class="hint">${esc(i.hint)}</div>` : ''}
+    </div>`;
+  }
+
+  if (r.canonical) {
+    html += `<div class="canon"><span class="k">Canonical form (safe to emit)</span>${esc(r.canonical)}</div>`;
+  }
+
+  if (r.parsed) {
+    const p = r.parsed;
+    html += `<div class="parsed"><b>parsed</b>  scheme=${esc(p.scheme)}  chainId=${esc(p.chainId)}  fn=${esc(p.functionName)}
+<b>target</b>   ${esc(p.target)}
+<b>recipient</b>${esc(p.recipient)}
+<b>amount</b>   ${esc(p.amount)}${p.isTokenTransfer ? '  (token transfer)' : ''}
+<b>params</b>   ${esc(JSON.stringify(p.params))}</div>`;
+  }
+
+  out.innerHTML = html;
+}
+
+$('check').addEventListener('click', () => render($('uri').value));
+$('clear').addEventListener('click', () => { $('uri').value = ''; $('out').innerHTML = ''; });
+for (const a of document.querySelectorAll('.examples a')) {
+  a.addEventListener('click', () => { $('uri').value = a.dataset.u; render(a.dataset.u); });
+}
+$('uri').addEventListener('input', () => render($('uri').value));
+$('uri').value = 'ethereum:0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed/transfer?address=0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359&uint256=1000';
+render($('uri').value);
+</script>
+</body>
+</html>
